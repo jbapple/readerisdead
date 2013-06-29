@@ -7,6 +7,7 @@ import urllib
 import urllib2
 import urlparse
 import xml.etree.cElementTree as ET
+import itertools
 
 import base.atom
 import base.log
@@ -18,6 +19,8 @@ _BASE_PARAMETERS = {
 }
 
 _READER_SHARED_TAG_FEED_URL_PATH_PREFIX = '/reader/public/atom/'
+
+network_retries = None
 
 def main():
   base.log.init()
@@ -55,8 +58,15 @@ def main():
                            'timestamp restriction)')
   parser.add_argument('--parallelism', type=int, default=10,
                       help='Number of feeds to fetch in parallel.')
+  parser.add_argument('--network_retries', type=int, default=0,
+                      help='Number of retries for each failed network request. '
+                      'Pass -1 to this parameter to retry indefinitely.')
 
   args = parser.parse_args()
+
+  global network_retries
+  network_retries = args.network_retries
+
   if args.opml_file:
     feed_urls = extract_feed_urls_from_opml_file(
       base.paths.normalize(args.opml_file))
@@ -188,6 +198,22 @@ def get_stream_id(feed_url):
     pass
   return 'feed/%s' % feed_url
 
+
+
+def _UrlOpenWithRetries(request):
+  global network_retries
+  i = 0
+  e = None
+  while network_retries < 0 or i <= network_retries:
+    i = i+1
+    try:
+      response = urllib2.urlopen(request)
+      return response
+    except urllib2.URLError, oops:
+      e = oops
+  raise e
+
+
 def fetch_feed(feed_url, max_items, output_path, media_rss=True, hifi=True):
   continuation_token = None
   combined_feed = None
@@ -205,7 +231,7 @@ def fetch_feed(feed_url, max_items, output_path, media_rss=True, hifi=True):
           urllib.urlencode(parameters)))
     logging.debug('Fetching %s', reader_url)
     request = urllib2.Request(reader_url)
-    response = urllib2.urlopen(request)
+    response = _UrlOpenWithRetries(request)
     response_tree = ET.parse(response)
     response_root = response_tree.getroot()
     entries = response_root.findall('{%s}entry' % base.atom.ATOM_NS)
