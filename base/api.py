@@ -18,8 +18,9 @@ _ITEM_ID_ATOM_FORM_PREFIX = 'tag:google.com,2005:reader/item/'
 not_found_items_ids_to_ignore = set()
 
 class Api(object):
-  def __init__(self, authenticated_url_fetcher, cache_directory=None):
-    self._direct_url_fetcher = base.url_fetcher.DirectUrlFetcher()
+  def __init__(self, authenticated_url_fetcher, cache_directory=None, network_retries=0):
+    self._network_retries = network_retries
+    self._direct_url_fetcher = base.url_fetcher.DirectUrlFetcher(self._network_retries)
     self._authenticated_url_fetcher = authenticated_url_fetcher
     self._cache = \
       base.cache.DirectoryCache(cache_directory) if cache_directory else None

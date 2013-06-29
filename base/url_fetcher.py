@@ -5,21 +5,38 @@ import urllib
 import urllib2
 import webbrowser
 import getpass
+import itertools
+
+def _UrlOpenWithRetries(network_retries, request, data=None):
+  i = 0
+  e = None
+  while network_retries < 0 or i <= network_retries:
+    i = i+1
+    try:
+      response = urllib2.urlopen(request, data=data)
+      return response
+    except urllib2.URLError, oops:
+      e = oops
+  raise e
 
 class UrlFetcher(object):
   def fetch(self, url, post_data=None):
     raise NotImplementedError()
 
 class DirectUrlFetcher(UrlFetcher):
+  def __init__(self, network_retries):
+    self._network_retries = network_retries
+
   def fetch(self, url, post_data=None):
     request = urllib2.Request(url)
-    response = urllib2.urlopen(request, data=post_data)
+    response = _UrlOpenWithRetries(self._network_retries, request, data=post_data)
     response_text = response.read()
     response.close()
     return response_text
 
 class ClientLoginUrlFetcher(UrlFetcher):
-  def __init__(self, account, password):
+  def __init__(self, account, password, network_retries):
+    self._network_retries = network_retries
     account = account or raw_input('Google Account username: ')
     password = password or getpass.getpass('Password: ')
     credentials_data = urllib.urlencode({
@@ -29,7 +46,7 @@ class ClientLoginUrlFetcher(UrlFetcher):
       'accountType': 'GOOGLE',
     })
     try:
-      auth_response = urllib2.urlopen(
+      auth_response = _UrlOpenWithRetries(self._network_retries,
           'https://www.google.com/accounts/ClientLogin', credentials_data)
     except urllib2.HTTPError, e:
       logging.error(
@@ -48,7 +65,7 @@ class ClientLoginUrlFetcher(UrlFetcher):
   def fetch(self, url, post_data=None):
     request = urllib2.Request(
         url, headers={'Authorization': 'GoogleLogin auth=%s' % self._auth_token})
-    response = urllib2.urlopen(request, data=post_data)
+    response = _UrlOpenWithRetries(self._network_retries, request, data=post_data)
     response_text = response.read()
     response.close()
     return response_text
@@ -57,7 +74,8 @@ _OAUTH_CLIENT_ID = '710067677727.apps.googleusercontent.com'
 _OAUTH_CLIENT_SECRET = '3152N3ORUhdIgYX4LwCcs9Ix'
 
 class OAuthUrlFetcher(UrlFetcher):
-  def __init__(self, refresh_token):
+  def __init__(self, refresh_token, network_retries):
+    self._network_retries = network_retries
     if refresh_token:
       self._refresh_token = refresh_token
       self._fetch_access_token()
@@ -71,7 +89,7 @@ class OAuthUrlFetcher(UrlFetcher):
 
     request = urllib2.Request(
         url, headers={'Authorization': 'Bearer %s' % self._access_token})
-    response = urllib2.urlopen(request, data=post_data)
+    response = _UrlOpenWithRetries(self_.network_retries, request, data=post_data)
     response_text = response.read()
     response.close()
     return response_text
@@ -97,7 +115,7 @@ class OAuthUrlFetcher(UrlFetcher):
 
     token_request = \
         urllib2.Request('https://accounts.google.com/o/oauth2/token')
-    token_response = urllib2.urlopen(token_request, data=urllib.urlencode({
+    token_response = _UrlOpenWithRetries(self._network_retries, token_request, data=urllib.urlencode({
       'code': authorization_code,
       'client_id': _OAUTH_CLIENT_ID,
       'client_secret': _OAUTH_CLIENT_SECRET,
@@ -120,7 +138,7 @@ class OAuthUrlFetcher(UrlFetcher):
   def _fetch_access_token(self):
     token_request = \
         urllib2.Request('https://accounts.google.com/o/oauth2/token')
-    token_response = urllib2.urlopen(token_request, data=urllib.urlencode({
+    token_response = _UrlOpenWithRetries(self._network_retries, token_request, data=urllib.urlencode({
       'refresh_token': self._refresh_token,
       'client_id': _OAUTH_CLIENT_ID,
       'client_secret': _OAUTH_CLIENT_SECRET,

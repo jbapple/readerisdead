@@ -53,10 +53,13 @@ def main():
                       help='Number of items per request for fetching comments '
                            'on shared items (higher is more efficient)')
   parser.add_argument('--max_streams', type=int, default=0,
-                      help='Maxmium number of streams to archive (0 for no'
+                      help='Maxmium number of streams to archive (0 for no '
                            'limit, only mean to be used for development)')
   parser.add_argument('--parallelism', type=int, default=10,
                       help='Number of requests to make in parallel.')
+  parser.add_argument('--network_retries', type=int, default=0,
+                      help='Number of retries for each failed network request. '
+                      'Pass -1 to this parameter to retry indefinitely.')
 
 
   # Miscellaneous.
@@ -80,13 +83,14 @@ def main():
 
   if args.use_client_login:
     authenticated_url_fetcher = base.url_fetcher.ClientLoginUrlFetcher(
-        args.account, args.password)
+        args.account, args.password, args.network_retries)
   else:
     authenticated_url_fetcher = base.url_fetcher.OAuthUrlFetcher(
-        args.oauth_refresh_token)
+        args.oauth_refresh_token, args.network_retries)
   api = base.api.Api(
       authenticated_url_fetcher=authenticated_url_fetcher,
-      cache_directory=api_responses_directory)
+      cache_directory=api_responses_directory,
+      network_retries=args.network_retries)
 
   user_info = api.fetch_user_info()
   logging.info(
